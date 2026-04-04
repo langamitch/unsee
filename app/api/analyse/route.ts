@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk'
-import { YoutubeTranscript } from 'youtube-transcript'
 import { NextRequest } from 'next/server'
+import { fetchTranscript } from '@/lib/transcript'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
@@ -12,11 +12,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Fetch transcript — throws if video has no captions or is private
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId)
-    const transcriptText = transcript.map(t => t.text).join(' ')
+    const { timedText } = await fetchTranscript(videoId)
 
-    if (!transcriptText.trim()) {
+    if (!timedText.trim()) {
       return Response.json({ error: 'No transcript available for this video.' }, { status: 400 })
     }
 
@@ -26,11 +24,32 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: 'You are a sharp video analyst. Analyse YouTube video transcripts concisely and insightfully.',
+          content: `You are a sharp video analyst. The transcript contains [MM:SS] timestamp markers — use them when citing specific moments. Always reference timestamps when mentioning quotes or topic shifts.`,
         },
         {
           role: 'user',
-          content: `Analyse this YouTube video transcript. Structure your response as:\n\n**Summary**\n2-3 sentence overview.\n\n**Main Topics**\nKey subjects covered.\n\n**Key Takeaways**\nMost important points.\n\n**Tone & Style**\nHow the presenter delivers content.\n\nTranscript:\n${transcriptText.slice(0, 12000)}`, // cap at ~12k chars to stay within context
+          content: `Analyse this YouTube video transcript with the following structure:
+
+**Summary**
+2-3 sentences capturing the core message.
+
+**Chapters**
+List the major topic shifts with their timestamps in [MM:SS] format and a one-line description each.
+
+**Key Quotes**
+3-5 notable direct quotes from the transcript, each with its [MM:SS] timestamp.
+
+**Sentiment Arc**
+How does the tone/energy evolve throughout the video? (e.g. starts neutral, builds urgency, ends motivational)
+
+**Takeaways**
+The 3 most important things a viewer should remember.
+
+**Audience**
+Who is this video made for and what level of knowledge does it assume?
+
+Transcript:
+${timedText.slice(0, 14000)}`,
         },
       ],
     })
