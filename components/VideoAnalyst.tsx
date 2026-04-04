@@ -512,7 +512,7 @@ export default function VideoAnalyst() {
               disabled={!!streamingReply}
               style={{
                 flex: 1, height: 42, background: 'transparent', border: 'none',
-                color: 'var(--text)', fontFamily: 'var(--font)', fontSize: 14,
+                color: 'var(--text)', fontFamily: 'var(--font)', fontSize: 16,
                 padding: '0 12px', outline: 'none',
               }}
             />
@@ -521,7 +521,7 @@ export default function VideoAnalyst() {
               background: question.trim() && !streamingReply ? 'var(--accent)' : 'var(--surface-2)',
               color: question.trim() && !streamingReply ? '#000' : 'var(--text-muted)',
               border: 'none', borderRadius: 6,
-              fontFamily: 'var(--font)', fontSize: 13, fontWeight: 600,
+              fontFamily: 'var(--font)', fontSize: 16, fontWeight: 600,
               cursor: !question.trim() || !!streamingReply ? 'not-allowed' : 'pointer',
               transition: 'all 0.15s', whiteSpace: 'nowrap',
             }}>

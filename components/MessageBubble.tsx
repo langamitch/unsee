@@ -18,7 +18,7 @@ export default function MessageBubble({ content, videoId, role }: Props) {
       {parts.map((part, i) => {
         if (part.type === 'timestamp' && part.seconds !== undefined) {
           return (
-            
+            <a
               key={i}
               href={`https://youtu.be/${videoId}?t=${part.seconds}`}
               target="_blank"
@@ -38,8 +38,8 @@ export default function MessageBubble({ content, videoId, role }: Props) {
                 cursor: 'pointer',
                 transition: 'background 0.1s',
               }}
-              onMouseEnter={e => ((e.target as HTMLElement).style.background = '#253300')}
-              onMouseLeave={e => ((e.target as HTMLElement).style.background = 'var(--accent-dim)')}
+              onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => ((e.target as HTMLElement).style.background = '#253300')}
+              onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => ((e.target as HTMLElement).style.background = 'var(--accent-dim)')}
             >
               {part.content}
             </a>
