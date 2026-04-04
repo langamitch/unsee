@@ -1,4 +1,5 @@
-import { YoutubeTranscript } from "youtube-transcript";
+import ytdl from 'ytdl-core'
+import { YoutubeTranscript, YoutubeTranscriptDisabledError, YoutubeTranscriptNotAvailableError, YoutubeTranscriptNotAvailableLanguageError } from 'youtube-transcript/dist/youtube-transcript.esm.js'
 
 export interface TranscriptSegment {
   text: string;
@@ -15,12 +16,27 @@ export interface ProcessedTranscript {
 export async function fetchTranscript(
   videoId: string,
 ): Promise<ProcessedTranscript> {
-  const raw = await YoutubeTranscript.fetchTranscript(videoId);
+  try {
+    return await fetchTranscriptFromYoutubeTranscript(videoId)
+  } catch (err: unknown) {
+    if (
+      err instanceof YoutubeTranscriptDisabledError ||
+      err instanceof YoutubeTranscriptNotAvailableError ||
+      err instanceof YoutubeTranscriptNotAvailableLanguageError
+    ) {
+      return await fetchTranscriptViaYtdl(videoId)
+    }
+    throw err
+  }
+}
+
+async function fetchTranscriptFromYoutubeTranscript(videoId: string): Promise<ProcessedTranscript> {
+  const raw = await YoutubeTranscript.fetchTranscript(videoId)
 
   const segments: TranscriptSegment[] = raw.map((s) => ({
     text: s.text.trim(),
     offset: Math.round(s.offset),
-  }));
+  }))
 
   const fullText = segments.map((s) => s.text).join(" ");
 
