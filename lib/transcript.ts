@@ -1,5 +1,10 @@
-import ytdl from 'ytdl-core'
-import { YoutubeTranscript, YoutubeTranscriptDisabledError, YoutubeTranscriptNotAvailableError, YoutubeTranscriptNotAvailableLanguageError } from 'youtube-transcript/dist/youtube-transcript.esm.js'
+import ytdl from "ytdl-core";
+import {
+  YoutubeTranscript,
+  YoutubeTranscriptDisabledError,
+  YoutubeTranscriptNotAvailableError,
+  YoutubeTranscriptNotAvailableLanguageError,
+} from "youtube-transcript/dist/youtube-transcript.esm.js";
 
 export interface TranscriptSegment {
   text: string;
@@ -17,36 +22,53 @@ export async function fetchTranscript(
   videoId: string,
 ): Promise<ProcessedTranscript> {
   try {
-    return await fetchTranscriptFromYoutubeTranscript(videoId)
+    return await fetchTranscriptFromYoutubeTranscript(videoId);
   } catch (err: unknown) {
     if (
       err instanceof YoutubeTranscriptDisabledError ||
       err instanceof YoutubeTranscriptNotAvailableError ||
       err instanceof YoutubeTranscriptNotAvailableLanguageError
     ) {
-      return await fetchTranscriptViaYtdl(videoId)
+      return await fetchTranscriptViaYtdl(videoId);
     }
-    throw err
+    throw err;
   }
 }
 
 interface YoutubeTranscriptSegment {
-  text: string
-  offset: number
+  text: string;
+  offset: number;
 }
 
 interface YoutubeTranscriptTrack {
-  baseUrl: string
-  languageCode: string
+  baseUrl: string;
+  languageCode: string;
 }
 
-async function fetchTranscriptFromYoutubeTranscript(videoId: string): Promise<ProcessedTranscript> {
-  const raw = await YoutubeTranscript.fetchTranscript(videoId) as YoutubeTranscriptSegment[]
+async function fetchTranscriptFromYoutubeTranscript(
+  videoId: string,
+): Promise<ProcessedTranscript> {
+  const requestHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    Referer: `https://www.youtube.com/watch?v=${videoId}`,
+  }
+
+  const raw = (await YoutubeTranscript.fetchTranscript(videoId, {
+    lang: 'en',
+    fetch: async (input: RequestInfo, init?: RequestInit) => {
+      const headers = new Headers(init?.headers ?? {})
+      Object.entries(requestHeaders).forEach(([key, value]) => headers.set(key, value))
+      const mergedInit = { ...init, headers }
+      return fetch(input, mergedInit)
+    },
+  })) as YoutubeTranscriptSegment[];
 
   const segments: TranscriptSegment[] = raw.map((s) => ({
     text: s.text.trim(),
     offset: Math.round(s.offset),
-  }))
+  }));
 
   const fullText = segments.map((s) => s.text).join(" ");
 
@@ -66,91 +88,104 @@ async function fetchTranscriptFromYoutubeTranscript(videoId: string): Promise<Pr
   return { segments, fullText, timedText: timedText.trim() };
 }
 
-async function fetchTranscriptViaYtdl(videoId: string): Promise<ProcessedTranscript> {
+async function fetchTranscriptViaYtdl(
+  videoId: string,
+): Promise<ProcessedTranscript> {
   const requestHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9',
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
     Referer: `https://www.youtube.com/watch?v=${videoId}`,
-  }
+  };
 
-  const info = await ytdl.getInfo(videoId, { requestOptions: { headers: requestHeaders } })
-  const tracks = info.player_response?.captions?.playerCaptionsTracklistRenderer?.captionTracks as YoutubeTranscriptTrack[] | undefined
+  const info = await ytdl.getInfo(videoId, {
+    requestOptions: { headers: requestHeaders },
+  });
+  const tracks = info.player_response?.captions?.playerCaptionsTracklistRenderer
+    ?.captionTracks as YoutubeTranscriptTrack[] | undefined;
   if (!Array.isArray(tracks) || tracks.length === 0) {
-    throw new Error(`No captions available for this video (${videoId})`)
+    throw new Error(`No captions available for this video (${videoId})`);
   }
 
-  const track = tracks.find((track) => track.languageCode === 'en') ?? tracks[0]
-  const url = track.baseUrl
+  const track =
+    tracks.find((track) => track.languageCode === "en") ?? tracks[0];
+  const url = track.baseUrl;
   const response = await fetch(url, {
     headers: {
       ...requestHeaders,
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      Origin: 'https://www.youtube.com',
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      Origin: "https://www.youtube.com",
     },
-  })
+  });
 
   if (!response.ok) {
-    throw new Error(`Unable to fetch captions for this video (${videoId}) - status ${response.status}`)
+    throw new Error(
+      `Unable to fetch captions for this video (${videoId}) - status ${response.status}`,
+    );
   }
 
-  const xml = await response.text()
-  const segments = parseTranscriptXml(xml)
+  const xml = await response.text();
+  const segments = parseTranscriptXml(xml);
   if (segments.length === 0) {
-    throw new Error(`No captions were parsed for this video (${videoId})`)
+    throw new Error(`No captions were parsed for this video (${videoId})`);
   }
 
-  const fullText = segments.map((s) => s.text).join(' ')
-  let timedText = ''
-  let lastMarkerAt = -60000
+  const fullText = segments.map((s) => s.text).join(" ");
+  let timedText = "";
+  let lastMarkerAt = -60000;
   for (const seg of segments) {
     if (seg.offset - lastMarkerAt >= 60000) {
-      const mins = Math.floor(seg.offset / 60000)
-      const secs = Math.floor((seg.offset % 60000) / 1000)
-      timedText += ` [${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}]`
-      lastMarkerAt = seg.offset
+      const mins = Math.floor(seg.offset / 60000);
+      const secs = Math.floor((seg.offset % 60000) / 1000);
+      timedText += ` [${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}]`;
+      lastMarkerAt = seg.offset;
     }
-    timedText += ' ' + seg.text
+    timedText += " " + seg.text;
   }
 
-  return { segments, fullText, timedText: timedText.trim() }
+  return { segments, fullText, timedText: timedText.trim() };
 }
 
 function parseTranscriptXml(xml: string): TranscriptSegment[] {
-  const segments: TranscriptSegment[] = []
-  const regex = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g
-  let match: RegExpExecArray | null
+  const segments: TranscriptSegment[] = [];
+  const regex = /<p\s+t="(\d+)"\s+d="(\d+)"[^>]*>([\s\S]*?)<\/p>/g;
+  let match: RegExpExecArray | null;
 
   while ((match = regex.exec(xml)) !== null) {
-    const offset = parseInt(match[1], 10)
-    const textContent = match[3]
-    let text = ''
-    const innerRegex = /<s[^>]*>([^<]*)<\/s>/g
-    let innerMatch: RegExpExecArray | null
+    const offset = parseInt(match[1], 10);
+    const textContent = match[3];
+    let text = "";
+    const innerRegex = /<s[^>]*>([^<]*)<\/s>/g;
+    let innerMatch: RegExpExecArray | null;
     while ((innerMatch = innerRegex.exec(textContent)) !== null) {
-      text += innerMatch[1]
+      text += innerMatch[1];
     }
     if (!text) {
-      text = textContent.replace(/<[^>]+>/g, '')
+      text = textContent.replace(/<[^>]+>/g, "");
     }
-    text = decodeEntities(text).trim()
+    text = decodeEntities(text).trim();
     if (text) {
-      segments.push({ text, offset })
+      segments.push({ text, offset });
     }
   }
 
-  return segments
+  return segments;
 }
 
 function decodeEntities(value: string): string {
   return value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_match, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex) =>
+      String.fromCodePoint(parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_match, dec) =>
+      String.fromCodePoint(parseInt(dec, 10)),
+    );
 }
 
 export function formatTimestamp(ms: number): string {
