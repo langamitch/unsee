@@ -67,7 +67,13 @@ async function fetchTranscriptFromYoutubeTranscript(videoId: string): Promise<Pr
 }
 
 async function fetchTranscriptViaYtdl(videoId: string): Promise<ProcessedTranscript> {
-  const info = await ytdl.getInfo(videoId)
+  const requestHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+    Referer: `https://www.youtube.com/watch?v=${videoId}`,
+  }
+
+  const info = await ytdl.getInfo(videoId, { requestOptions: { headers: requestHeaders } })
   const tracks = info.player_response?.captions?.playerCaptionsTracklistRenderer?.captionTracks as YoutubeTranscriptTrack[] | undefined
   if (!Array.isArray(tracks) || tracks.length === 0) {
     throw new Error(`No captions available for this video (${videoId})`)
@@ -77,12 +83,14 @@ async function fetchTranscriptViaYtdl(videoId: string): Promise<ProcessedTranscr
   const url = track.baseUrl
   const response = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ...requestHeaders,
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      Origin: 'https://www.youtube.com',
     },
   })
 
   if (!response.ok) {
-    throw new Error(`Unable to fetch captions for this video (${videoId})`)
+    throw new Error(`Unable to fetch captions for this video (${videoId}) - status ${response.status}`)
   }
 
   const xml = await response.text()
